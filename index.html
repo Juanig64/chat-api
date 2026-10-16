@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SaaS Dashboard Funcional</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f4f6f9; }
+        .auth-container { max-width: 400px; margin: 100px auto; padding: 20px; background: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 8px; }
+        .dashboard { display: none; grid-template-columns: 1fr 1fr 1fr; gap: 20px; max-width: 1200px; margin: 0 auto; }
+        .card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        input, textarea, button { width: 100%; padding: 10px; margin: 8px 0; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0056b3; }
+        ul { list-style: none; padding: 0; }
+        li { background: #f8f9fa; padding: 10px; margin-bottom: 5px; border-left: 4px solid #007bff; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <!-- MÓDULO AUTENTICACIÓN -->
+    <div id="authBox" class="auth-container">
+        <h2>Chat SaaS - Acceso</h2>
+        <input type="text" id="username" placeholder="Usuario">
+        <input type="password" id="password" placeholder="Contraseña">
+        <button onclick="login()">Entrar</button>
+        <button onclick="registro()" style="background:#28a745;">Registrarse</button>
+    </div>
+
+    <!-- DASHBOARD PRINCIPAL DEL SAAS -->
+    <div id="dashboardBox" class="dashboard">
+        
+        <!-- MÓDULO 1: CHAT BASE -->
+        <div class="card">
+            <h3>💬 Chat Global</h3>
+            <div id="chatArea" style="height:250px; overflow-y:auto; border:1px solid #ddd; padding:10px; margin-bottom:10px; background:#fafafa;"></div>
+            <input type="text" id="msgInput" placeholder="Escribe un mensaje...">
+            <button onclick="enviarMensaje()">Enviar</button>
+        </div>
+
+        <!-- MÓDULO 2: TICKETS (NUEVO) -->
+        <div class="card">
+            <h3>🛠️ Tickets de Soporte</h3>
+            <input type="text" id="ticketTitle" placeholder="Título del incidente">
+            <textarea id="ticketDesc" placeholder="Descripción..."></textarea>
+            <button onclick="crearTicket()">Abrir Ticket</button>
+            <ul id="ticketsList"></ul>
+        </div>
+
+        <!-- MÓDULO 3: TAREAS (NUEVO) -->
+        <div class="card">
+            <h3>📋 Mis Tareas Pendientes</h3>
+            <input type="text" id="taskTitle" placeholder="Nueva tarea...">
+            <button onclick="crearTarea()">Añadir Tarea</button>
+            <ul id="tareasList"></ul>
+        </div>
+
+    </div>
+
+    <script>
+        let usuarioActual = "";
+
+        async function login() {
+            const u = document.getElementById("username").value;
+            const p = document.getElementById("password").value;
+            const res = await fetch("/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username: u, password: p })
+            });
+            const data = await res.json();
+            if(data.ok) {
+                usuarioActual = data.username;
+                document.getElementById("authBox").style.display = "none";
+                document.getElementById("dashboardBox").style.display = "grid";
+                inicializarSaaS();
+            } else { alert(data.error); }
+        }
+
+        async function registro() {
+            const u = document.getElementById("username").value;
+            const p = document.getElementById("password").value;
+            const res = await fetch("/registro", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username: u, password: p })
+            });
+            const data = await res.json();
+            if(data.ok) alert("Registro exitoso, ya puedes iniciar sesión.");
+            else alert(data.error);
+        }
+
+        function inicializarSaaS() {
+            cargarMensajes();
+            cargarTickets();
+            cargarTareas();
+            setInterval(cargarMensajes, 3000); 
+        }
+
+        // FUNCIONES CHAT
+        async function cargarMensajes() {
+            const res = await fetch(`/mensajes/${usuarioActual}`);
+            const mensajes = await res.json();
+            const area = document.getElementById("chatArea");
+            area.innerHTML = mensajes.map(m => `<div><strong>${m.de}:</strong> ${m.mensaje}</div>`).join("");
+        }
+
+        async function enviarMensaje() {
+            const txt = document.getElementById("msgInput").value;
+            if(!txt) return;
+            await fetch("/mensaje", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ de: usuarioActual, mensaje: txt })
+            });
+            document.getElementById("msgInput").value = "";
+            cargarMensajes();
+        }
+
+        // FUNCIONES TICKETS
+        async function crearTicket() {
+            const t = document.getElementById("ticketTitle").value;
+            const d = document.getElementById("ticketDesc").value;
+            await fetch("/tickets", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ titulo: t, descripcion: d, creadoPor: usuarioActual })
+            });
+            document.getElementById("ticketTitle").value = "";
+            document.getElementById("ticketDesc").value = "";
+            cargarTickets();
+        }
+
+        async function cargarTickets() {
+            const res = await fetch("/tickets");
+            const tickets = await res.json();
+            const lista = document.getElementById("ticketsList");
+            lista.innerHTML = tickets.map(t => `<li><strong>${t.titulo}</strong> (${t.estado})<br><small>${t.descripcion}</small></li>`).join("");
+        }
+
+        // FUNCIONES TAREAS
+        async function crearTarea() {
+            const t = document.getElementById("taskTitle").value;
+            await fetch("/tareas", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ titulo: t, usuario: usuarioActual })
+            });
+            document.getElementById("taskTitle").value = "";
+            cargarTareas();
+        }
+
+        async function cargarTareas() {
+            const res = await fetch(`/tareas/${usuarioActual}`);
+            const tareas = await res.json();
+            const lista = document.getElementById("tareasList");
+            lista.innerHTML = tareas.map(t => `<li>✅ ${t.titulo}</li>`).join("");
+        }
+    </script>
+</body>
+</html>
